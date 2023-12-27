@@ -2,72 +2,88 @@
 
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
-
 import { Button } from "@/components/ui/button";
 import {
-  FormItem,
   Form,
   FormControl,
   FormDescription,
   FormField,
+  FormItem,
   FormLabel,
   FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
-import DatePicker from "react-datepicker";
-
-import * as z from "zod";
 import { eventFormSchema } from "@/lib/validator";
+import * as z from "zod";
 import { eventDefaultValues } from "@/constants";
-import DropDown from "./DropDown";
-import { Textarea } from "../ui/textarea";
+import { Textarea } from "@/components/ui/textarea";
 import { FileUploader } from "./FileUploader";
 import { useState } from "react";
 import Image from "next/image";
+import DatePicker from "react-datepicker";
 import { useUploadThing } from "@/lib/uploadthing";
 
 import "react-datepicker/dist/react-datepicker.css";
 import { Checkbox } from "../ui/checkbox";
 import { useRouter } from "next/navigation";
-import { createEvent } from "@/lib/actions/event.action";
+import { IEvent } from "@/lib/database/models/event.model";
+import DropDown from "./DropDown";
+import { createEvent, updateEvent } from "@/lib/actions/event.action";
 
 type EventFormProps = {
   userId: string;
   type: "Create" | "Update";
+  event?: IEvent;
+  eventId?: string;
 };
 
-const EventForm = ({ userId, type }: EventFormProps) => {
+const EventForm = ({ userId, type, event, eventId }: EventFormProps) => {
+  console.log(userId, type, event, eventId);
   const [files, setFiles] = useState<File[]>([]);
-  const initialValues = eventDefaultValues;
+  const initialValues =
+    event && type === "Update"
+      ? {
+          ...event,
+          categoryId: event?.category?._id,
+          startDateTime: event?.startDateTime
+            ? new Date(event.startDateTime)
+            : new Date(),
+          endDateTime: event?.endDateTime
+            ? new Date(event.endDateTime)
+            : new Date(),
+        }
+      : eventDefaultValues;
+  const router = useRouter();
 
   const { startUpload } = useUploadThing("imageUploader");
 
-  const router = useRouter();
+  console.log(initialValues);
 
   const form = useForm<z.infer<typeof eventFormSchema>>({
     resolver: zodResolver(eventFormSchema),
     defaultValues: initialValues,
   });
 
-  // 2. Define a submit handler.
+  console.log(form.formState);
+
   async function onSubmit(values: z.infer<typeof eventFormSchema>) {
-    // Do something with the form values.
-    // ✅ This will be type-safe and validated.
-    let uploadImageUrl = values.imageUrl;
+    let uploadedImageUrl = values.imageUrl;
+    console.log("PEDE");
 
     if (files.length > 0) {
-      const uploadImages = await startUpload(files);
-      if (!uploadImageUrl) {
+      const uploadedImages = await startUpload(files);
+
+      if (!uploadedImages) {
         return;
       }
 
-      uploadImageUrl = uploadImages?.[0]?.url ?? "";
+      uploadedImageUrl = uploadedImages[0].url;
     }
 
     if (type === "Create") {
       try {
         const newEvent = await createEvent({
-          event: { ...values, imageUrl: uploadImageUrl },
+          event: { ...values, imageUrl: uploadedImageUrl },
           userId,
           path: "/profile",
         });
@@ -76,7 +92,34 @@ const EventForm = ({ userId, type }: EventFormProps) => {
           form.reset();
           router.push(`/events/${newEvent._id}`);
         }
-      } catch (error) {}
+      } catch (error) {
+        console.log(error);
+      }
+    }
+    console.log(1);
+    if (type === "Update") {
+      console.log(2);
+
+      if (!eventId) {
+        router.back();
+
+        return;
+      }
+
+      try {
+        const updatedEvent = await updateEvent({
+          userId,
+          event: { ...values, imageUrl: uploadedImageUrl, _id: eventId },
+          path: `/events/${eventId}`,
+        });
+        console.log(3);
+
+        if (updatedEvent) {
+          router.push(`/events/${updatedEvent._id}`);
+        }
+      } catch (error) {
+        console.log(error);
+      }
     }
   }
 
@@ -86,7 +129,7 @@ const EventForm = ({ userId, type }: EventFormProps) => {
         onSubmit={form.handleSubmit(onSubmit)}
         className="flex flex-col gap-5"
       >
-        <div className="flex flex-col gap-5 md:flex-row ">
+        <div className="flex flex-col gap-5 md:flex-row">
           <FormField
             control={form.control}
             name="title"
@@ -94,12 +137,11 @@ const EventForm = ({ userId, type }: EventFormProps) => {
               <FormItem className="w-full">
                 <FormControl>
                   <Input
-                    placeholder="Event Title"
+                    placeholder="Event title"
                     {...field}
                     className="input-field"
                   />
                 </FormControl>
-
                 <FormMessage />
               </FormItem>
             )}
@@ -115,12 +157,12 @@ const EventForm = ({ userId, type }: EventFormProps) => {
                     value={field.value}
                   />
                 </FormControl>
-
                 <FormMessage />
               </FormItem>
             )}
           />
         </div>
+
         <div className="flex flex-col gap-5 md:flex-row">
           <FormField
             control={form.control}
